@@ -1,0 +1,5 @@
+BITB|Bitwise Bitcoin ETF|比特币
+BITO|ProShares Bitcoin ETF|比特币
+BITW|Bitwise 10 Crypto Index|比特币
+DEFI|Bitwise DeFi Plus|比特币
+A|aa|主题
