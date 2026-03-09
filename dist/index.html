@@ -86,7 +86,7 @@
             return;
           }
           board.style.display='block';
-          var r=await fetch('/api/quote?symbols='+encodeURIComponent(tickers.join(',')),{cache:'no-store'});
+          var r=await fetch('https://scanner.tradingview.com/america/scan?symbols='+encodeURIComponent(tickers.map(function(t){return 'AMEX:'+t;}).join(',')),{cache:'no-store'});
           var d=await r.json();
           if(!Array.isArray(d)||!d.length) return;
           var html=d.filter(function(x){return x&&x.ticker&&typeof x.price!=='undefined';}).map(function(x){
@@ -115,7 +115,34 @@
           if(btn){btn.click();}
         },1500);
       }
-      
+      // 确保有数据
+      function ensureDataLoaded(){
+        try{
+          var d=JSON.parse(localStorage.getItem('ok_cmd_data_v38')||'null');
+          if(!d||!d.length){
+            var symbols=["SPY","QQQ","VTI","IWM","EFA","EEM","VWO","VOO","IWF","IWD","XLV","USMV","IVE","IVW","ITOT","VOOG","SCHD","VYM","VIG","VYM","VIGX","VEA","XOP","XLE","XLF","XBI","XLY","XLP","XRT","XHB","XHE","XLV","XLK","BND","AGG","TLT","SHY","TIPS","IEF","LQD","GLD","IAU","SLV","GDX"];
+            fetch('https://scanner.tradingview.com/america/scan',{
+              method:'POST',
+              headers:{'content-type':'application/json'},
+              body:JSON.stringify({
+                symbols:{tickers:symbols.map(function(s){return 'AMEX:'+s;})},
+                query:{types:[]},
+                columns:['close','change','description','name']
+              })
+            }).then(function(r){return r.json();}).then(function(q){
+              if(q&&Array.isArray(q.data)){
+                var fresh=q.data.map(function(x){
+                  var parts=x.s.split(':'), ticker=parts[1]||x.s, price=x.d[0], chg=x.d[1], nameZh=x.d[4]||x.d[3]||'';
+                  return {id:ticker,ticker:ticker,price:price,chg:chg,changePercent24h:chg,nameZh:nameZh};
+                });
+                localStorage.setItem('ok_cmd_data_v38',JSON.stringify(fresh));
+                refreshThermogram(params.get('filter')||'ALL');
+              }
+            }).catch(function(){});
+          }
+        }catch(e){}
+      }
+      setTimeout(ensureDataLoaded,2500);
       function ensureThermoBlock(){
         var root=document.getElementById('root');
         var app=root&&root.firstElementChild;
@@ -239,13 +266,18 @@
           box.id='mini-kline';
           box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>'+symbol+'</b><span style="cursor:pointer;opacity:.6" onclick="this.parentNode.parentNode.remove()">✕</span></div><div style="opacity:.7">Loading...</div>';
           document.body.appendChild(box);
-          var r=await fetch('/api/chart?symbol='+encodeURIComponent(symbol),{cache:'no-store'});
+          var r=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(symbol)+'?interval=1d&range=7d&includePrePost=true',{cache:'no-store'});
           var d=await r.json();
-          if(!d||!Array.isArray(d.data)||!d.data.length){ box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>'+symbol+'</b><span style="cursor:pointer;opacity:.6" onclick="this.parentNode.parentNode.remove()">✕</span></div><div style="opacity:.7">No chart data</div>'; return; }
-          var vals=d.data.map(function(x){return x.c;});
-          var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals), w=180, h=72;
-          var pts=vals.map(function(v,i){ var x=i*(w/(vals.length-1||1)); var y=max===min ? h/2 : h-((v-min)/(max-min))*h; return x.toFixed(1)+','+y.toFixed(1); }).join(' ');
-          var last=vals[vals.length-1], first=vals[0], up=last>=first;
+          if(!d||!Array.isArray(d.chart.result)||!d.chart.result.length){ box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>'+symbol+'</b><span style="cursor:pointer;opacity:.6" onclick="this.parentNode.parentNode.remove()">✕</span></div><div style="opacity:.7">No chart data</div>'; return; }
+          var result=d.chart.result[0];
+          var timestamps=result.timestamp||[];
+          var quotes=(result.indicators||{}).quote||[{}];
+          var closes=(quotes[0]||{}).close||[];
+          var vals=[]; for(var i=0;i<timestamps.length&&i<closes.length;i++){ if(closes[i]!==null) vals.push({t:timestamps[i],c:closes[i]}); }
+          if(!vals.length){ box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>'+symbol+'</b><span style="cursor:pointer;opacity:.6" onclick="this.parentNode.parentNode.remove()">✕</span></div><div style="opacity:.7">No chart data</div>'; return; }
+          var first=vals[0].c, last=vals[vals.length-1].c, up=last>=first;
+          var min=Math.min.apply(null,vals.map(function(v){return v.c;})), max=Math.max.apply(null,vals.map(function(v){return v.c;})), w=180, h=72;
+          var pts=vals.map(function(v,i){ var x=i*(w/(vals.length-1||1)); var y=max===min ? h/2 : h-((v.c-min)/(max-min))*h; return x.toFixed(1)+','+y.toFixed(1); }).join(' ');
           box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>'+symbol+'</b><span style="cursor:pointer;opacity:.6" onclick="this.parentNode.parentNode.remove()">✕</span></div>'+
             '<svg viewBox="0 0 '+w+' '+h+'"><polyline fill="none" stroke="'+(up?'#198754':'#dc3545')+'" stroke-width="2" points="'+pts+'" /></svg>'+
             '<div style="margin-top:6px;opacity:.8">7D · '+first.toFixed(2)+' → '+last.toFixed(2)+'</div>';
@@ -273,14 +305,11 @@
       async function tick(){
         var t0=Date.now();
         try{
-          var r=await fetch('/api/market-data',{cache:'no-store'});
-          var d=await r.json();
+          var localData=JSON.parse(localStorage.getItem('ok_cmd_data_v38')||'null');
+          var total=localData?localData.length:0;
+          var zero=localData?localData.filter(function(x){return Math.abs(parseFloat(x.changePercent24h||0))<0.005;}).length:0;
           var ms=Date.now()-t0;
-          var total=d?d.length:0;
-          var zero=d?d.filter(function(x){return Math.abs(parseFloat(x.changePercent24h||0))<0.005;}).length:0;
-          var src=d&&d[0]&&d[0].source?d[0].source:'-';
-          var ts=d&&d[0]&&d[0].ts?new Date(d[0].ts).toLocaleTimeString():new Date().toLocaleTimeString();
-          var cls=total>0&&zero/Math.max(total,1)<0.3?'ok':(total>0?'warn':'err');
+          var src='localStorage', ts=new Date().toLocaleTimeString(), cls=total>0?'ok':'err';
           el.innerHTML='DATA: <span class="'+cls+'">SRC:'+src+'</span> | COUNT:'+fmt(total)+' | ZERO:'+fmt(zero)+' | RTT:'+ms+'ms | TS:'+ts;
           setTimeout(function(){
             document.querySelectorAll('main div.grid>div').forEach(function(row){
