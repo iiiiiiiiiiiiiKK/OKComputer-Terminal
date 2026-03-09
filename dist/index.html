@@ -232,8 +232,20 @@
           var rows=getCurrentFilterTickers().slice(0,30);
           if(!rows.length){ grid.innerHTML='<div style="opacity:.6">No assets</div>'; return; }
           var symbols=rows.map(function(x){return x.ticker;}).filter(Boolean);
-          var q=await fetch('/api/quote?symbols='+encodeURIComponent(symbols.join(',')),{cache:'no-store'}).then(function(r){return r.json();});
-          var map={}; (q||[]).forEach(function(x){ if(x&&x.ticker) map[x.ticker]=x; });
+          var q=await fetch('https://scanner.tradingview.com/america/scan',{
+            method:'POST',
+            headers:{'content-type':'application/json'},
+            body:JSON.stringify({
+              symbols:{tickers:symbols.map(function(t){return 'AMEX:'+t;})},
+              query:{types:[]},
+              columns:['close','change']
+            }),
+            cache:'no-store'
+          }).then(function(r){return r.json();});
+          var map={}; (q&&q.data||[]).forEach(function(x){
+            var parts=x.s.split(':'), ticker=parts[1]||x.s;
+            map[ticker]={price:x.d[0],chg:x.d[1]};
+          });
           var ranked=rows.map(function(x){
             var m=map[x.ticker]||{}, chg=parseFloat(m.chg||x.chg||0), price=(typeof m.price==='number'?m.price:x.price);
             return {x:x, chg:chg, price:price, abs:Math.abs(chg)};
