@@ -210,11 +210,27 @@ export default function App() {
 
   const fetchRealData = async () => {
     setLogs(p => [...p, { t: new Date().toLocaleTimeString(), m: '>>> 正在拉取全球实时数据...' }]);
-    const url = `/api/market-data`;
+    const symbols = ["SPY","QQQ","DIA","IWM","IWF","IWD","VTI","IVV","VOO","AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","META","BTC-USD","ETH-USD","SOL-USD","GC=F","CL=F","EURUSD=X","USDJPY=X","TNX"];
     try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (Array.isArray(data)) {
+      const res = await fetch('https://scanner.tradingview.com/america/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols: { tickers: symbols.map(s => 'AMEX:' + s) },
+          query: { types: [] },
+          columns: ['close', 'change', 'description', 'name']
+        })
+      });
+      const q = await res.json();
+      const data = (q.data || []).map(x => {
+        const parts = x.s.split(':');
+        return {
+          symbol: parts[1] || x.s,
+          price: x.d?.[0] || 0,
+          changePercent24h: x.d?.[1] || 0
+        };
+      });
+      if (Array.isArray(data) && data.length > 0) {
         setEtfs(prev => {
           const next = prev.map(e => {
             const q = data.find(r => r.symbol === e.ticker);
@@ -224,7 +240,6 @@ export default function App() {
           return next;
         });
         setLogs(p => [...p, { t: new Date().toLocaleTimeString(), m: `[OK] 全球行情数据同步成功。` }]);
-        // 刷新动画：给所有行添加闪烁效果
         const allSymbols = new Set(data.map(x => x.symbol));
         setRowFlash(allSymbols);
         setTimeout(() => setRowFlash(new Set()), 600);

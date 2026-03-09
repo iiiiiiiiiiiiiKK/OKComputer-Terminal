@@ -1,150 +1,107 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>okcomputer-app</title>
-    <script type="module" crossorigin src="/assets/index-DMzIBGps.js?v=20260309a"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-rR2Ka2nL.css?v=20260309a">
-    <style>
-      html,body{height:auto!important;min-height:100%;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
-      #root>div{height:auto!important;min-height:100vh!important;overflow:visible!important}
-      main.flex-1.overflow-y-auto{flex:0 0 auto!important;overflow:visible!important;min-height:auto!important}
-      #data-health-badge{font:10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:#1a1a1a;padding-top:2px;white-space:nowrap;overflow-x:auto}
-      #data-health-badge .ok{color:#198754} #data-health-badge .warn{color:#fd7e14} #data-health-badge .err{color:#dc3545}
-      .row-flash{animation:rowFlash 0.6s ease-out}
-      #mini-kline{position:fixed;right:12px;bottom:58px;z-index:1201;min-width:180px;max-width:220px;padding:8px 10px;border:1px solid #dee2e6;background:rgba(248,249,250,.96);font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 4px 16px rgba(0,0,0,.08)}
-      #mini-kline svg{display:block;width:100%;height:72px}
-      .macro-up{color:#198754}.macro-down{color:#dc3545}.macro-flat{color:#6c757d}
-      @keyframes rowFlash{0%{opacity:1;background:rgba(25,135,84,0.2)}50%{opacity:0.7}100%{opacity:1;background:transparent}}
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>
-    (function(){
-      // 实时数据（每次刷新都从 TradingView 获取）
-      async function ensureDataLoaded(){
-        try{
-          var symbols=["SPY","QQQ","DIA","IWM","IWF","IWD","VTI","IVV","VOO","AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","META","BTC-USD","ETH-USD","SOL-USD","GC=F","CL=F","EURUSD=X","USDJPY=X","TNX","BITB","BITO","BITW","DEFI"];
-          var r=await fetch("https://scanner.tradingview.com/america/scan",{
-            method:'POST',
-            headers:{'content-type':'application/json'},
-            body:JSON.stringify({
-              symbols:{tickers:symbols.map(function(s){return 'AMEX:'+s;})},
-              query:{types:[]},
-              columns:['close','change','description','name']
-            }),
-            cache:'no-store'
-          });
-          var q=await r.json();
-          if(q&&Array.isArray(q.data)){
-            var fresh=q.data.map(function(x){
-              var parts=x.s.split(':'), ticker=parts[1]||x.s, price=x.d[0], chg=x.d[1], nameZh=x.d[4]||x.d[3]||'';
-              return {id:ticker,ticker:ticker,price:price,chg:chg,changePercent24h:chg,nameZh:nameZh};
-            });
-            window.okCmdData=fresh;
-            if(typeof renderRows==='function'){
-              renderRows(fresh);
-            }
-            if(typeof renderThermogram==='function'){
-              renderThermogram();
-            }
-          }
-        }catch(e){
-          console.error('ensureDataLoaded error:',e);
-          window.okCmdData=[];
-        }
-      }
-      ensureDataLoaded();
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OKComputer Terminal</title>
+<style>
+html,body{height:auto!important;min-height:100%;overflow-y:auto!important}
+#root{min-height:100vh;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f8f9fa;color:#1a1a1a}
+header{border:2px solid #dee2e6;padding:12px;margin-bottom:12px;background:#fff}
+.header-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid #dee2e6;padding:4px 8px;cursor:pointer;background:#fff;font-size:12px;margin:2px}
+.btn.active{background:#1a1a1a;color:#fff}
+.stats{display:flex;gap:16px;font-size:12px;opacity:0.7;margin:8px 0}
+.search-box{border:1px solid #dee2e6;padding:6px;margin:8px 0;width:100%;font-size:12px}
+.list{grid-template-columns:1fr 2fr 1fr;gap:8px;padding:8px 0}
+.row{display:grid;grid-template-columns:1fr 3fr 2fr 2fr;gap:8px;padding:8px 0;border-bottom:1px dashed #dee2epx;font-size:12px;align-items:center}
+.row.up{color:#198754}.row.down{color:#dc3545}
+#data-health{position:fixed;bottom:8px;right:8px;font-size:10px;opacity:0.7;background:rgba(255,255,255,0.9);padding:4px 8px;border:1px solid #dee2e6}
+#thermo{margin-top:12px;padding:12px;border:1px dashed #dee2e6}
+#thermo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.thermo-cell{padding:8px;text-align:center;font-size:11px;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="root">
+<header>
+<div class="header-row">
+<div style="font-size:14px;font-weight:bold">root@Marketlist:~$ ./terminal_Open</div>
+<div style="display:flex;gap:4px;flex-wrap:wrap">
+<button class="btn active" onclick="filter='ALL';render()">[ ALL ]</button>
+<button class="btn" onclick="filter='FAVS';render()">[ FAVS ]</button>
+<button class="btn" onclick="filter='BTC';render()">[ BTC ]</button>
+<button class="btn" onclick="filter='FAANG';render()">[ FAANG ]</button>
+<button class="btn" onclick="theme=theme==='light'?'dark':'light';render()">[ THEME ]</button>
+</div>
+</div>
+<div class="stats">
+<span>TOTAL: <b id="total">0</b></span>
+<span>UP: <b id="up">0</b></span>
+<span>DOWN: <b id="down">0</b></span>
+</div>
+<input class="search-box" placeholder="@oAdam" onkeyup="search=this.value;render()">
+</header>
+<main id="list"></main>
+<div id="thermo"><div style="font-weight:bold;margin-bottom:8px">>_ MARKET THERMOGRAM</div><div id="thermo-grid"></div></div>
+</div>
+<div id="data-health">DATA: SRC:tradingview | COUNT:0 | TS:--:--:--</div>
+<script>
+var data=[],filter='ALL',search='',theme='light',favs=JSON.parse(localStorage.getItem('favs')||'[]');
+var symbols=["SPY","QQQ","DIA","IWM","IWF","IWD","VTI","IVV","VOO","AAPL","MSFT","GOOGL","AMZN","NVDA","TSLA","META","BTC-USD","ETH-USD","SOL-USD","GC=F","CL=F","EURUSD=X","USDJPY=X","TNX","BITB","BITO","BITW","DEFI"];
 
-      // 滚动数据（从 TradingView 实时获取）
-      function getFavTickers(){
-        try{
-          if(typeof window.okCmdData==='undefined' || !Array.isArray(window.okCmdData)) return [];
-          return window.okCmdData.map(function(x){return x.ticker;}).filter(Boolean);
-        }catch(e){ return []; }
-      }
-      var macroPos=0,macroTimer=null;
-      function startMacroScroll(){
-        var board=document.getElementById('macro-board');
-        var track=document.getElementById('macro-track');
-        if(!board||!track) return;
-        if(macroTimer) clearInterval(macroTimer);
-        macroTimer=setInterval(function(){
-          var half=track.scrollWidth/2;
-          macroPos+=1.1;
-          if(macroPos>=half) macroPos=0;
-          track.style.transform='translateX('+(-macroPos)+'px)';
-        },30);
-      }
-      async function refreshMacroBoard(){
-        try{
-          ensureMacroBoard();
-          var board=document.getElementById('macro-board');
-          var track=document.getElementById('macro-track');
-          if(!board||!track) return;
-          var tickers=getFavTickers();
-          if(!tickers.length){
-            board.style.display='none';
-            if(macroTimer) clearInterval(macroTimer);
-            return;
-          }
-          board.style.display='block';
-          var r=await fetch('https://scanner.tradingview.com/america/scan?symbols='+encodeURIComponent(tickers.join(',')),{cache:'no-store'});
-          var d=await r.json();
-          if(!Array.isArray(d)||!d.length) return;
-          var html=d.filter(function(x){return x&&x.ticker&&typeof x.price!=='undefined';}).map(function(x){
-            var chg=parseFloat(x.chg||0),cls=chg>0?'macro-up':(chg<0?'macro-down':'macro-flat');
-            var arrow=chg>0?'↑':(chg<0?'↓':'→');
-            var price=(typeof x.price==='number')?x.price.toFixed(2):x.price;
-            return '<span style="display:inline-flex;gap:2px;white-space:nowrap;margin-right:16px"><b>'+x.ticker+'</b><span style="color:'+cls+'">'+price+' '+arrow+Math.abs(chg).toFixed(2)+'%</span></span>';
-          }).join('<span style="opacity:.35"> | </span>');
-          if(!html){ board.style.display='none'; return; }
-          track.innerHTML=html+'<span style="opacity:.35"> | </span>'+html;
-          macroPos=0;
-          track.style.transform='translateX(0px)';
-          startMacroScroll();
-        }catch(e){}
-      }
-      function ensureMacroBoard(){
-        var root=document.getElementById('root');
-        var app=root&&root.firstElementChild;
-        if(!app||document.getElementById('macro-board')) return;
-        var bar=document.createElement('div');
-        bar.id='macro-board';
-        bar.style.cssText='display:flex;gap:12px;padding:6px 0;overflow-x:hidden;overflow-y:hidden;font-size:10px;border-top:1px dashed #dee2e6;border-bottom:1px dashed #dee2e6';
-        root.insertBefore(bar, root.firstChild);
-      }
-      setTimeout(refreshMacroBoard,1500);
-      setInterval(refreshMacroBoard,10000);
-
-      // 数据健康角标
-      async function tick(){
-        var el=document.getElementById('data-health-badge');
-        if(!el) return;
-        var t0=Date.now();
-        try{
-          if(typeof window.okCmdData==='undefined' || !Array.isArray(window.okCmdData)) window.okCmdData=[];
-          var data=window.okCmdData;
-          var ms=Date.now()-t0;
-          var total=data.length;
-          var zero=data.filter(function(x){return Math.abs(parseFloat(x.changePercent24h||0))<0.005;}).length;
-          var src='tradingview';
-          var ts=new Date().toLocaleTimeString();
-          var cls=total>0&&zero/Math.max(total,1)<0.3?'ok':(total>0?'warn':'err');
-          el.innerHTML='DATA: <span class="'+cls+'">SRC:'+src+'</span> | COUNT:'+total+' | ZERO:'+zero+' | RTT:'+ms+'ms | TS:'+ts;
-        }catch(e){
-          el.innerHTML='<span class="err">DATA LINK ERROR</span>';
-        }
-      }
-      var el=document.createElement('div');
-      el.id='data-health-badge';
-      el.style.cssText='font:10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:#1a1a1a;padding-top:2px;white-space:nowrap;overflow-x:auto';
-      if(document.body) document.body.appendChild(el);
-      tick();
-      setInterval(tick,10000);
-    })();
-    </script>
-  </body>
+function fetchData(){
+  fetch('https://scanner.tradingview.com/america/scan',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      symbols:{tickers:symbols.map(s=>'AMEX:'+s)},
+      query:{types:[]},
+      columns:['close','change']
+    })
+  }).then(r=>r.json()).then(q=>{
+    data=(q.data||[]).map(x=>{
+      var p=x.s.split(':');
+      return{symbol:p[1],price:x.d[0],chg:x.d[1]};
+    });
+    render();
+    updateThermo();
+    document.getElementById('data-health').innerHTML='DATA: SRC:tradingview | COUNT:'+data.length+' | TS:'+new Date().toLocaleTimeString();
+  }).catch(e=>{
+    document.getElementById('data-health').innerHTML='DATA: SRC:ERROR | COUNT:0';
+  });
+}
+function render(){
+  var list=document.getElementById('list');
+  var f=data.filter(d=>{
+    if(filter==='ALL')return true;
+    if(filter==='FAVS')return favs.includes(d.symbol);
+    if(filter==='BTC')return['BTC-USD','ETH-USD','SOL-USD','BITB','BITO','BITW','DEFI'].includes(d.symbol);
+    if(filter==='FAANG')return['AAPL','MSFT','GOOGL','AMZN','NVDA','TSLA','META'].includes(d.symbol);
+    return true;
+  }).filter(d=>search?d.symbol.toLowerCase().includes(search.toLowerCase()):true);
+  var up=f.filter(d=>d.chg>0).length;
+  var down=f.filter(d=>d.chg<0).length;
+  document.getElementById('total').innerText=f.length;
+  document.getElementById('up').innerText=up;
+  document.getElementById('down').innerText=down;
+  list.innerHTML=f.map(d=>'<div class="row '+(d.chg>0?'up':d.chg<0?'down':'')+'"><div>'+d.symbol+'</div><div style="opacity:0.7">'+(d.symbol.length<5?'':d.symbol)+'</div><div style="text-align:right">$'+(d.price||'-')+'</div><div style="text-align:right;font-weight:bold">'+(d.chg>0?'+':'')+(d.chg||0).toFixed(2)+'%</div></div>').join('');
+}
+function updateThermo(){
+  var grid=document.getElementById('thermo-grid');
+  if(!data.length)return;
+  var sorted=[...data].sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg));
+  grid.innerHTML=sorted.slice(0,16).map(d=>{
+    var bg=d.chg>0?'rgba(25,135,84,'+(0.2+Math.min(1,Math.abs(d.chg)/10)*0.6)+')':d.chg<0?'rgba(220,53,69,'+(0.2+Math.min(1,Math.abs(d.chg)/10)*0.6)+')':'rgba(108,117,125,0.2)';
+    return'<div class="thermo-cell" style="background:'+bg+';color:#fff"><div style="font-weight:bold">'+d.symbol+'</div><div>'+(d.chg>0?'+':'')+d.chg.toFixed(1)+'%</div></div>';
+  }).join('');
+}
+document.querySelectorAll('.btn').forEach(b=>b.onclick=function(){
+  document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));
+  this.classList.add('active');
+});
+fetchData();
+setInterval(fetchData,10000);
+</script>
+</body>
 </html>
